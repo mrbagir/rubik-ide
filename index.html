@@ -500,9 +500,8 @@
  * ================================================================= */
 
 function solve(cube) {
-
-    cube.move("R U R' U'");
-
+	// Example:
+	cube.move("R U R' U'");
 }</textarea>
             </div>
         </div>
@@ -531,9 +530,9 @@ function solve(cube) {
             tabSize: 4,
             indentUnit: 4,
             extraKeys: {
-                "Cmd-/": "toggleComment",      // Mac
-      "Ctrl-/": "toggleComment"      // Windows/Linux
-    }
+                "Cmd-/": "toggleComment",
+                "Ctrl-/": "toggleComment"
+            }
         });
 
         // ==================== UTILITIES ====================
@@ -544,6 +543,91 @@ function solve(cube) {
             setTimeout(() => { box.style.display = 'none'; }, 4000);
         }
 
+        function debounce(fn, delay) {
+            let timer;
+            return function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+        }
+
+        // ==================== LOCAL STORAGE ====================
+        const LS_KEY_CODE  = 'rubik_code';
+        const LS_KEY_SLOTS = 'rubik_slots';
+        const LS_KEY_CUBE  = 'rubik_cube';
+
+        function serializeCubeState() {
+            return {
+                virtualPieces: JSON.parse(JSON.stringify(virtualCube.pieces)),
+                visualCubies: cubies.map(c => ({
+                    px: c.position.x, py: c.position.y, pz: c.position.z,
+                    qx: c.quaternion.x, qy: c.quaternion.y, qz: c.quaternion.z, qw: c.quaternion.w,
+                })),
+            };
+        }
+
+        function saveCodeToLS() {
+            try { localStorage.setItem(LS_KEY_CODE, cmInstance.getValue()); } catch(e) {}
+        }
+
+        function saveSlotsToLS() {
+            try {
+                const data = savedSlots.map(s => ({
+                    id: s.id,
+                    virtualPieces: s.virtualPieces,
+                    visualCubies: s.visualCubies.map(c => ({
+                        px: c.position.x ?? c.px, py: c.position.y ?? c.py, pz: c.position.z ?? c.pz,
+                        qx: c.quaternion.x ?? c.qx, qy: c.quaternion.y ?? c.qy,
+                        qz: c.quaternion.z ?? c.qz, qw: c.quaternion.w ?? c.qw,
+                    })),
+                }));
+                localStorage.setItem(LS_KEY_SLOTS, JSON.stringify(data));
+            } catch(e) {}
+        }
+
+        function saveCubeToLS() {
+            try { localStorage.setItem(LS_KEY_CUBE, JSON.stringify(serializeCubeState())); } catch(e) {}
+        }
+
+        const debouncedSaveCode = debounce(saveCodeToLS, 500);
+        const debouncedSaveCube = debounce(saveCubeToLS, 300);
+        const debouncedSaveSlots = debounce(saveSlotsToLS, 300);
+
+        function deserializeSlot(raw) {
+            return {
+                id: raw.id,
+                virtualPieces: raw.virtualPieces,
+                visualCubies: raw.visualCubies.map(c => ({
+                    position: new THREE.Vector3(c.px, c.py, c.pz),
+                    quaternion: new THREE.Quaternion(c.qx, c.qy, c.qz, c.qw),
+                })),
+            };
+        }
+
+        function loadFromLS() {
+            try {
+                const code = localStorage.getItem(LS_KEY_CODE);
+                if (code !== null) cmInstance.setValue(code);
+
+                const slotsRaw = localStorage.getItem(LS_KEY_SLOTS);
+                if (slotsRaw) {
+                    savedSlots = JSON.parse(slotsRaw).map(deserializeSlot);
+                    renderSlots();
+                }
+
+                const cubeRaw = localStorage.getItem(LS_KEY_CUBE);
+                if (cubeRaw) {
+                    const state = JSON.parse(cubeRaw);
+                    virtualCube.pieces = state.virtualPieces;
+                    state.visualCubies.forEach((c, i) => {
+                        cubies[i].position.set(c.px, c.py, c.pz);
+                        cubies[i].quaternion.set(c.qx, c.qy, c.qz, c.qw);
+                    });
+                    renderer.render(scene, camera);
+                }
+            } catch(e) { console.warn('Failed to load from localStorage:', e); }
+        }
+
         // ==================== FOCUS MANAGEMENT ====================
         // Ensure clicking outside editor blurs CodeMirror so shortcuts work
         document.addEventListener('pointerdown', (e) => {
@@ -552,6 +636,9 @@ function solve(cube) {
                 canvasContainer.focus();
             }
         }, true);
+
+        // Save code on every change (debounced)
+        cmInstance.on('change', debouncedSaveCode);
 
         // ==================== THREE.JS SETUP ====================
         const scene = new THREE.Scene();
@@ -911,6 +998,7 @@ function solve(cube) {
                     });
                     rubikGroup.remove(pivot);
                     if (callback) callback();
+                    debouncedSaveCube();
                 })
                 .start();
         }
@@ -978,6 +1066,7 @@ function solve(cube) {
             initCubeVisuals();
             virtualCube.reset();
             renderer.render(scene, camera);
+            debouncedSaveCube();
         });
 
         viewBtn.addEventListener('click', () => {
@@ -1012,6 +1101,7 @@ function solve(cube) {
                 })),
             });
             renderSlots();
+            debouncedSaveSlots();
         });
 
         function renderSlots() {
@@ -1042,6 +1132,7 @@ function solve(cube) {
                     e.stopPropagation();
                     savedSlots = savedSlots.filter(s => s.id !== slot.id);
                     renderSlots();
+                    debouncedSaveSlots();
                 };
 
                 badge.appendChild(label);
@@ -1205,6 +1296,9 @@ function solve(cube) {
                 renderer.render(scene, camera);
             }
         }).observe(canvasContainer);
+
+        // ==================== LOAD SAVED STATE ====================
+        loadFromLS();
 
         // ==================== ANIMATION LOOP ====================
         (function animate(time) {
