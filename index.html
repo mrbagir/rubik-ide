@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Rubik's Cube Solver</title>
+    
+    <!-- Load Three.js, Tween.js, OrbitControls, CodeMirror, and FontAwesome -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- CodeMirror 5 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/darcula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            touch-action: none; /* Prevent default touch actions like pinch-zoom on mobile */
+        }
+
+        #message-box {
+            display: none;
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff4444;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            z-index: 100;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Centered UI Container inside Canvas */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        button.icon-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            cursor: pointer;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #555;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        button.icon-btn:hover {
+            background-color: #444;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        button.icon-btn:active { transform: translateY(0); }
+
+        button:disabled {
+            background-color: #222;
+            color: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .controls-hint {
+            font-size: 12px;
+            color: #aaa;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        /* INFO ICON & TOOLTIP STYLES */
+        #info-icon-container {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 50;
+        }
+
+        #info-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: rgba(30, 30, 30, 0.2);
+            border: 1px solid rgba(150, 150, 150, 0.15);
+            color: rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: normal;
+            cursor: help;
+            transition: all 0.2s ease;
+        }
+
+        #info-icon:hover {
+            background-color: rgba(85, 85, 85, 0.9);
+            color: #fff;
+            border-color: #888;
+            transform: scale(1.1);
+        }
+
+        #info-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            background-color: rgba(30, 30, 30, 0.95);
+            color: #eee;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            width: 320px;
+            font-size: 13px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: visibility 0s, opacity 0.2s ease-in-out;
+            pointer-events: none;
+            line-height: 1.5;
+        }
+
+        #info-icon-container:hover #info-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .tooltip-title {
+            font-weight: bold;
+            color: #007acc;
+            margin-bottom: 8px;
+            font-size: 14px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 4px;
+        }
+
+        .shortcut-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 5px 10px;
+        }
+
+        .kbd-key {
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-family: monospace;
+            font-size: 11px;
+            display: inline-block;
+            text-align: center;
+            color: #fff;
+        }
+
+        /* --- SAVED SLOTS STYLES --- */
+        #slots-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(20, 20, 20, 0.85);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 50;
+            pointer-events: auto; /* Ensures it can be clicked */
+            max-height: 50vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            min-width: 120px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #slots-container:empty {
+            display: none;
+        }
+
+        .slots-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #007acc;
+            margin-bottom: 5px;
+            text-align: center;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .slot-badge {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 13px;
+            transition: transform 0.2s ease, background 0.2s ease;
+            cursor: pointer;
+            color: #ddd;
+        }
+
+        .slot-badge:hover {
+            background: #444;
+            transform: translateX(-5px);
+        }
+
+        .slot-label {
+            flex-grow: 1;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .delete-slot {
+            color: #ff4444;
+            cursor: pointer;
+            padding: 2px 5px;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+
+        .delete-slot:hover {
+            background: rgba(255, 68, 68, 0.2);
+        }
+
+        /* Layout Styles */
+        #main-layout {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            min-width: 0;
+            display: block;
+        }
+
+        /* --- DRAGGABLE RESIZER & VERTICAL TRAPEZOID BUTTON --- */
+        #resizer {
+            width: 6px;
+            background-color: #333;
+            cursor: col-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 30;
+            transition: background-color 0.2s;
+        }
+
+        #resizer:hover, #resizer.resizing { background-color: #007acc; }
+
+        #toggle-panel-btn {
+            position: absolute;
+            left: -20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 70px;
+            background-color: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+            padding: 0;
+            font-weight: bold;
+            font-size: 14px;
+            clip-path: polygon(0 15px, 100% 0, 100% 100%, 0 calc(100% - 15px));
+            transition: background-color 0.2s;
+        }
+
+        #resizer:hover #toggle-panel-btn, 
+        #resizer.resizing #toggle-panel-btn {
+            background-color: #007acc;
+        }
+
+        #toggle-panel-btn:hover {
+            background-color: #0098ff !important;
+        }
+
+        /* Editor Panel */
+        #editor-panel {
+            width: 33.33%;
+            min-width: 0;
+            height: 100%;
+            background-color: #2b2b2b; /* CodeMirror Darcula Background matching */
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+            overflow: hidden;
+            transition: width 0.3s ease-in-out;
+            border-left: 1px solid #222;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background-color: #2d2d2d;
+            border-bottom: 1px solid #444;
+            font-weight: bold;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #ccc;
+            font-weight: normal;
+        }
+
+        input[type="range"] {
+            width: 80px;
+            accent-color: #007acc;
+            cursor: pointer;
+        }
+
+        #run-btn {
+            background-color: #007acc;
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            width: 90px;
+        }
+
+        #run-btn:hover { background-color: #0098ff; }
+
+        .editor-wrapper {
+            position: relative;
+            flex-grow: 1;
+            overflow: hidden;
+            background-color: #2b2b2b;
+        }
+
+        /* --- CODEMIRROR STYLES --- */
+        .CodeMirror {
+            height: 100%;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Custom Floating Alert Box -->
+    <div id="message-box"><span id="message-text">Error message here</span></div>
+
+    <div id="main-layout">
+        <!-- Left Side: Rubik Canvas -->
+        <div id="canvas-container" tabindex="0" style="outline: none;">
+            <div id="ui-container">
+                <div class="btn-row">
+                    <button id="reset-btn" class="icon-btn" title="Reset Cube (Shift + 1)">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                    <button id="shuffle-btn" class="icon-btn" title="Shuffle Cube (Shift + 2)">
+                        <i class="fa-solid fa-shuffle"></i>
+                    </button>
+                    <!-- Coordinate Toggle Button -->
+                    <button id="view-btn" class="icon-btn" title="Toggle Coordinates (Shift + 3)">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                    <button id="save-btn" class="icon-btn" title="Save Position Slot (Shift + 4)">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                    </button>
+                </div>
+                <div class="controls-hint">Drag to rotate camera</div>
+            </div>
+
+            <!-- SLOTS CONTAINER MOVED TO BOTTOM RIGHT -->
+            <div id="slots-container"></div>
+
+            <!-- INFO ICON TOOLTIP -->
+            <div id="info-icon-container">
+                <div id="info-icon"><i class="fa-solid fa-info"></i></div>
+                <div id="info-tooltip">
+                    <div class="tooltip-title">Keyboard Shortcuts</div>
+                    <p style="margin-top:0; margin-bottom: 8px; color: #aaa;">Ensure the 3D view is focused (click on it).</p>
+                    <div class="shortcut-grid">
+                        <span><span class="kbd-key">U</span> <span class="kbd-key">D</span> <span class="kbd-key">F</span> <span class="kbd-key">B</span> <span class="kbd-key">L</span> <span class="kbd-key">R</span></span>
+                        <span>Rotate outer faces</span>
+                        
+                        <span><span class="kbd-key">M</span> <span class="kbd-key">E</span> <span class="kbd-key">S</span></span>
+                        <span>Rotate middle slices</span>
+
+                        <span><span class="kbd-key">Shift</span> + Key</span>
+                        <span>Reverse move (Prime / ')</span>
+
+                        <span><span class="kbd-key">1</span>-<span class="kbd-key">9</span>, <span class="kbd-key">0</span></span>
+                        <span>Load Slot 1-10</span>
+
+                        <span><span class="kbd-key">Shift</span> + <span class="kbd-key">1</span>-<span class="kbd-key">4</span></span>
+                        <span>Reset, Shuffle, View, Save</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle: Resizer -->
+        <div id="resizer">
+            <button id="toggle-panel-btn">&gt;</button>
+        </div>
+
+        <!-- Right Side: Editor Panel -->
+        <div id="editor-panel">
+            <div class="editor-header">
+                <span>JavaScript Solver</span>
+                <div class="header-controls">
+                    <div class="speed-control">
+                        <label for="speed-slider">Speed:</label>
+                        <input type="range" id="speed-slider" min="50" max="950" value="700">
+                    </div>
+                    <button id="run-btn">RUN <i class="fa-solid fa-play"></i></button>
+                </div>
+            </div>
+            <div class="editor-wrapper">
+                <!-- Textarea for CodeMirror to attach to -->
+                <textarea id="code-editor" spellcheck="false">
+/* =================================================================
+ * RUBIK'S CUBE SOLVER API GUIDE
+ * =================================================================
+ * 1. GET COLOR: cube.getColor(face, row, col)
+ *    - face: 'U' (Yellow), 'D' (White), 'F' (Green), 
+ *            'B' (Blue), 'L' (Orange), 'R' (Red)
+ *    - row & col: 0 to 2 (0,0 is Top-Left, 2,2 is Bottom-Right)
+ * 
+ * 2. FIND PIECE: cube.findPiece('Color1', 'Color2', ...)
+ *    - example: cube.findPiece('W', 'G')
+ *    - returns: { 'W': 'D', 'G': 'F' } (Color: Face)
+ * 
+ * 3. MOVE CUBE: cube.move("Notation")
+ *    - Standard: U, D, F, B, L, R
+ *    - Slice: M, E, S
+ *    - Rotations: x, y, z
+ *    - Wide: u, r, l, f, b, d
+ *    - Modifiers: ' (prime), 2 (double)
+ *    - Example: cube.move("M E S x' R2 u'")
+ * ================================================================= */
+
+function solve(cube) {
+
+    cube.move("R U R' U'");
+
+}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== DOM REFERENCES ====================
+        const canvasContainer = document.getElementById('canvas-container');
+        const codeEditor     = document.getElementById('code-editor');
+        const shuffleBtn     = document.getElementById('shuffle-btn');
+        const resetBtn       = document.getElementById('reset-btn');
+        const viewBtn        = document.getElementById('view-btn');
+        const saveBtn        = document.getElementById('save-btn');
+        const runBtn         = document.getElementById('run-btn');
+        const speedSlider    = document.getElementById('speed-slider');
+        const slotsContainer = document.getElementById('slots-container');
+        const editorPanel    = document.getElementById('editor-panel');
+        const resizerEl      = document.getElementById('resizer');
+        const togglePanelBtn = document.getElementById('toggle-panel-btn');
+
+        // ==================== CODEMIRROR SETUP ====================
+        const cmInstance = CodeMirror.fromTextArea(codeEditor, {
+            mode: "javascript",
+            theme: "darcula",
+            lineNumbers: true,
+            tabSize: 4,
+            indentUnit: 4,
+            extraKeys: {
+                "Cmd-/": "toggleComment",      // Mac
+      "Ctrl-/": "toggleComment"      // Windows/Linux
+    }
+        });
+
+        // ==================== UTILITIES ====================
+        function showMessage(text) {
+            const box = document.getElementById('message-box');
+            document.getElementById('message-text').innerText = text;
+            box.style.display = 'block';
+            setTimeout(() => { box.style.display = 'none'; }, 4000);
+        }
+
+        // ==================== FOCUS MANAGEMENT ====================
+        // Ensure clicking outside editor blurs CodeMirror so shortcuts work
+        document.addEventListener('pointerdown', (e) => {
+            if (!editorPanel.contains(e.target) && e.target !== resizerEl) {
+                cmInstance.getInputField().blur();
+                canvasContainer.focus();
+            }
+        }, true);
+
+        // ==================== THREE.JS SETUP ====================
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(6, 5, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        canvasContainer.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enablePan = false;
+
+        // ==================== CUBE VISUALS ====================
+        const rubikGroup = new THREE.Group();
+        scene.add(rubikGroup);
+        let cubies = [];
+
+        const FACE_COLORS = {
+            R: 0xff0000, L: 0xff8800,
+            U: 0xffff00, D: 0xffffff,
+            F: 0x00ff00, B: 0x0000ff,
+        };
+
+        function initCubeVisuals() {
+            while (rubikGroup.children.length > 0) {
+                rubikGroup.remove(rubikGroup.children[0]);
+            }
+            cubies = [];
+
+            for (let x = -1; x <= 1; x++) {
+                for (let y = -1; y <= 1; y++) {
+                    for (let z = -1; z <= 1; z++) {
+                        const geo = new THREE.BoxGeometry(0.95, 0.95, 0.95);
+                        const mats = [
+                            new THREE.MeshLambertMaterial({ color: x ===  1 ? FACE_COLORS.R : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: x === -1 ? FACE_COLORS.L : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: y ===  1 ? FACE_COLORS.U : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: y === -1 ? FACE_COLORS.D : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: z ===  1 ? FACE_COLORS.F : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: z === -1 ? FACE_COLORS.B : 0x111111 }),
+                        ];
+
+                        const mesh = new THREE.Mesh(geo, mats);
+                        mesh.position.set(x, y, z);
+                        mesh.add(new THREE.LineSegments(
+                            new THREE.EdgesGeometry(geo),
+                            new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 })
+                        ));
+
+                        rubikGroup.add(mesh);
+                        cubies.push(mesh);
+                    }
+                }
+            }
+        }
+        initCubeVisuals();
+
+        // ==================== SHARED: FACE COORDS ====================
+        const FACE_DEFS = [
+            { name: 'U', axis: 'y', dir:  1 },
+            { name: 'D', axis: 'y', dir: -1 },
+            { name: 'F', axis: 'z', dir:  1 },
+            { name: 'B', axis: 'z', dir: -1 },
+            { name: 'L', axis: 'x', dir: -1 },
+            { name: 'R', axis: 'x', dir:  1 },
+        ];
+
+        function getFaceCoords(face, r, c) {
+            let x, y, z;
+            switch (face) {
+                case 'U': y =  1; z = r - 1; x = c - 1; break;
+                case 'D': y = -1; z = 1 - r; x = c - 1; break;
+                case 'F': z =  1; y = 1 - r; x = c - 1; break;
+                case 'B': z = -1; y = 1 - r; x = 1 - c; break;
+                case 'L': x = -1; y = 1 - r; z = 1 - c; break;
+                case 'R': x =  1; y = 1 - r; z = c - 1; break;
+            }
+            return { x, y, z };
+        }
+
+        // ==================== COORDINATE LABELS ====================
+        const labelsGroup = new THREE.Group();
+        let isViewActive = false;
+
+        function createTextSprite(text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 5;
+            ctx.strokeText(text, 64, 32);
+            ctx.fillStyle = 'white';
+            ctx.fillText(text, 64, 32);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const sprite = new THREE.Sprite(
+                new THREE.SpriteMaterial({ map: texture, depthTest: true })
+            );
+            sprite.scale.set(0.7, 0.35, 1);
+            return sprite;
+        }
+
+        function initCoordinateLabels() {
+            while (labelsGroup.children.length > 0) {
+                labelsGroup.remove(labelsGroup.children[0]);
+            }
+
+            const LABEL_OFFSET = 1.6;
+
+            for (const f of FACE_DEFS) {
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 3; c++) {
+                        const coords = getFaceCoords(f.name, r, c);
+                        const sprite = createTextSprite(`${f.name}[${r},${c}]`);
+                        sprite.position.set(
+                            f.axis === 'x' ? f.dir * LABEL_OFFSET : coords.x,
+                            f.axis === 'y' ? f.dir * LABEL_OFFSET : coords.y,
+                            f.axis === 'z' ? f.dir * LABEL_OFFSET : coords.z
+                        );
+                        labelsGroup.add(sprite);
+                    }
+                }
+            }
+        }
+        initCoordinateLabels();
+
+        // ==================== SHARED: MOVE PARSING ====================
+        const MOVE_DEFS = {
+            'R': { axis: 'x', layers: [1],        dir: -1 },
+            'L': { axis: 'x', layers: [-1],       dir:  1 },
+            'U': { axis: 'y', layers: [1],        dir: -1 },
+            'D': { axis: 'y', layers: [-1],       dir:  1 },
+            'F': { axis: 'z', layers: [1],        dir: -1 },
+            'B': { axis: 'z', layers: [-1],       dir:  1 },
+            'M': { axis: 'x', layers: [0],        dir:  1 },
+            'E': { axis: 'y', layers: [0],        dir:  1 },
+            'S': { axis: 'z', layers: [0],        dir: -1 },
+            'r': { axis: 'x', layers: [1, 0],     dir: -1 },
+            'l': { axis: 'x', layers: [-1, 0],    dir:  1 },
+            'u': { axis: 'y', layers: [1, 0],     dir: -1 },
+            'd': { axis: 'y', layers: [-1, 0],    dir:  1 },
+            'f': { axis: 'z', layers: [1, 0],     dir: -1 },
+            'b': { axis: 'z', layers: [-1, 0],    dir:  1 },
+            'x': { axis: 'x', layers: [-1, 0, 1], dir: -1 },
+            'y': { axis: 'y', layers: [-1, 0, 1], dir: -1 },
+            'z': { axis: 'z', layers: [-1, 0, 1], dir: -1 },
+        };
+
+        function parseMove(m) {
+            const def = MOVE_DEFS[m[0]];
+            if (!def) return null;
+
+            const isPrime  = m.includes("'");
+            const isDouble = m.includes('2');
+
+            return {
+                axis:   def.axis,
+                layers: def.layers,
+                dir:    isPrime ? def.dir * -1 : def.dir,
+                steps:  isDouble ? 2 : 1,
+            };
+        }
+
+        // ==================== VIRTUAL CUBE ====================
+        class VirtualCube {
+            constructor() { this.reset(); }
+
+            reset() {
+                this.pieces = [];
+                for (let x = -1; x <= 1; x++) {
+                    for (let y = -1; y <= 1; y++) {
+                        for (let z = -1; z <= 1; z++) {
+                            this.pieces.push({
+                                x, y, z,
+                                colors: {
+                                    U: y ===  1 ? 'Y' : null,
+                                    D: y === -1 ? 'W' : null,
+                                    F: z ===  1 ? 'G' : null,
+                                    B: z === -1 ? 'B' : null,
+                                    L: x === -1 ? 'O' : null,
+                                    R: x ===  1 ? 'R' : null,
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+
+            getColor(face, r, c) {
+                const { x, y, z } = getFaceCoords(face, r, c);
+                const piece = this.pieces.find(p =>
+                    Math.abs(p.x - x) < 0.1 &&
+                    Math.abs(p.y - y) < 0.1 &&
+                    Math.abs(p.z - z) < 0.1
+                );
+                return piece ? piece.colors[face] : null;
+            }
+
+            findPiece(...searchColors) {
+                for (const p of this.pieces) {
+                    const activeFaces = Object.keys(p.colors).filter(f => p.colors[f] !== null);
+                    const pieceColors = activeFaces.map(f => p.colors[f]);
+
+                    if (pieceColors.length === searchColors.length &&
+                        searchColors.every(c => pieceColors.includes(c))) {
+                        const result = {};
+                        activeFaces.forEach(f => { result[p.colors[f]] = f; });
+                        return result;
+                    }
+                }
+                return null;
+            }
+
+            move(movesStr) {
+                for (const m of movesStr.trim().split(/\s+/)) {
+                    if (!m) continue;
+                    this._applyMove(m);
+                    queueVisualMove(m);
+                }
+            }
+
+            _applyMove(m) {
+                const parsed = parseMove(m);
+                if (!parsed) return;
+
+                const { axis, layers, dir, steps } = parsed;
+
+                for (let i = 0; i < steps; i++) {
+                    this.pieces.forEach(p => {
+                        if (!layers.some(l => Math.abs(p[axis] - l) < 0.1)) return;
+
+                        const tx = p.x, ty = p.y, tz = p.z;
+                        const tc = { ...p.colors };
+
+                        if (axis === 'x') {
+                            p.y = tz * -dir;
+                            p.z = ty * dir;
+                            if (dir === -1) {
+                                p.colors.U = tc.F; p.colors.B = tc.U;
+                                p.colors.D = tc.B; p.colors.F = tc.D;
+                            } else {
+                                p.colors.U = tc.B; p.colors.F = tc.U;
+                                p.colors.D = tc.F; p.colors.B = tc.D;
+                            }
+                        } else if (axis === 'y') {
+                            p.x = tz * dir;
+                            p.z = tx * -dir;
+                            if (dir === -1) {
+                                p.colors.F = tc.R; p.colors.L = tc.F;
+                                p.colors.B = tc.L; p.colors.R = tc.B;
+                            } else {
+                                p.colors.F = tc.L; p.colors.R = tc.F;
+                                p.colors.B = tc.R; p.colors.L = tc.B;
+                            }
+                        } else if (axis === 'z') {
+                            p.x = ty * -dir;
+                            p.y = tx * dir;
+                            if (dir === -1) {
+                                p.colors.U = tc.L; p.colors.R = tc.U;
+                                p.colors.D = tc.R; p.colors.L = tc.D;
+                            } else {
+                                p.colors.U = tc.R; p.colors.L = tc.U;
+                                p.colors.D = tc.L; p.colors.R = tc.D;
+                            }
+                        }
+
+                        p.x = Math.round(p.x);
+                        p.y = Math.round(p.y);
+                        p.z = Math.round(p.z);
+                    });
+                }
+            }
+        }
+
+        const virtualCube = new VirtualCube();
+
+        // ==================== ANIMATION QUEUE ====================
+        const moveQueue = [];
+        let isProcessingQueue = false;
+        let isShuffling = false;
+
+        function getSpeed() {
+            return 1000 - parseInt(speedSlider.value);
+        }
+
+        function resetState() {
+            moveQueue.length = 0;
+            TWEEN.removeAll();
+            isProcessingQueue = false;
+            isShuffling = false;
+            shuffleBtn.disabled = false;
+            runBtn.innerHTML = 'RUN <i class="fa-solid fa-play"></i>';
+            runBtn.style.backgroundColor = '';
+        }
+
+        function queueVisualMove(m) {
+            const parsed = parseMove(m);
+            if (!parsed) return;
+
+            for (let i = 0; i < parsed.steps; i++) {
+                moveQueue.push({
+                    axis:      parsed.axis,
+                    layers:    parsed.layers,
+                    direction: parsed.dir,
+                });
+            }
+
+            if (!isProcessingQueue) processQueue();
+        }
+
+        function processQueue() {
+            if (moveQueue.length === 0) {
+                resetState();
+                return;
+            }
+
+            isProcessingQueue = true;
+            const move = moveQueue.shift();
+            const speed = isShuffling ? 120 : getSpeed();
+            animateRotation(move.axis, move.layers, move.direction, speed, processQueue);
+        }
+
+        function animateRotation(axis, layers, direction, duration, callback) {
+            const pivot = new THREE.Object3D();
+            rubikGroup.add(pivot);
+
+            const activeCubies = [];
+            cubies.forEach(cubie => {
+                if (layers.some(l => Math.abs(cubie.position[axis] - l) < 0.1)) {
+                    pivot.attach(cubie);
+                    activeCubies.push(cubie);
+                }
+            });
+
+            new TWEEN.Tween({ value: 0 })
+                .to({ value: direction * Math.PI / 2 }, duration)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(obj => { pivot.rotation[axis] = obj.value; })
+                .onComplete(() => {
+                    pivot.updateMatrixWorld();
+                    activeCubies.forEach(cubie => {
+                        rubikGroup.attach(cubie);
+                        cubie.position.x = Math.round(cubie.position.x);
+                        cubie.position.y = Math.round(cubie.position.y);
+                        cubie.position.z = Math.round(cubie.position.z);
+                    });
+                    rubikGroup.remove(pivot);
+                    if (callback) callback();
+                })
+                .start();
+        }
+
+        // ==================== KEYBOARD CONTROLS ====================
+        const VALID_KEYS = ['u', 'd', 'f', 'b', 'l', 'r', 'm', 'e', 's'];
+
+        document.addEventListener('keydown', (e) => {
+            if (editorPanel.contains(document.activeElement)) return;
+
+            // --- Number & Action Shortcuts ---
+            if (e.code && e.code.startsWith('Digit')) {
+                const digit = parseInt(e.code.replace('Digit', ''));
+                
+                if (e.shiftKey) {
+                    if (digit === 1) { resetBtn.click(); e.preventDefault(); return; }
+                    if (digit === 2) { shuffleBtn.click(); e.preventDefault(); return; }
+                    if (digit === 3) { viewBtn.click(); e.preventDefault(); return; }
+                    if (digit === 4) { saveBtn.click(); e.preventDefault(); return; }
+                } else {
+                    // Slot 1 is 'Digit1' (digit=1, index=0)
+                    // Slot 10 is 'Digit0' (digit=0, index=9)
+                    const slotIndex = digit === 0 ? 9 : digit - 1;
+                    if (slotIndex >= 0 && slotIndex < savedSlots.length) {
+                        loadSlot(savedSlots[slotIndex].id);
+                        e.preventDefault();
+                    }
+                    return;
+                }
+            }
+
+            // --- Rubik Rotation Shortcuts ---
+            const key = e.key.toLowerCase();
+            if (VALID_KEYS.includes(key)) {
+                let notation = key.toUpperCase();
+                if (e.shiftKey) notation += "'";
+                virtualCube.move(notation);
+            }
+        });
+
+        // ==================== BUTTON HANDLERS ====================
+        shuffleBtn.addEventListener('click', () => {
+            if (isProcessingQueue) return;
+            isShuffling = true;
+            shuffleBtn.disabled = true;
+
+            const SHUFFLE_MOVES = ["R","R'","L","L'","U","U'","D","D'","F","F'","B","B'"];
+            const scramble = [];
+            let lastMove = '';
+
+            for (let i = 0; i < 20; i++) {
+                let move;
+                do {
+                    move = SHUFFLE_MOVES[Math.floor(Math.random() * SHUFFLE_MOVES.length)];
+                } while (move[0] === lastMove[0]);
+                scramble.push(move);
+                lastMove = move;
+            }
+
+            virtualCube.move(scramble.join(' '));
+        });
+
+        resetBtn.addEventListener('click', () => {
+            resetState();
+            initCubeVisuals();
+            virtualCube.reset();
+            renderer.render(scene, camera);
+        });
+
+        viewBtn.addEventListener('click', () => {
+            isViewActive = !isViewActive;
+            if (isViewActive) {
+                scene.add(labelsGroup);
+                viewBtn.style.backgroundColor = '#007acc';
+                viewBtn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+            } else {
+                scene.remove(labelsGroup);
+                viewBtn.style.backgroundColor = '#333';
+                viewBtn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+            }
+            renderer.render(scene, camera);
+        });
+
+        // ==================== SAVE & LOAD SLOTS ====================
+        let savedSlots = [];
+
+        saveBtn.addEventListener('click', () => {
+            if (isProcessingQueue) {
+                showMessage('Wait for animation to finish before saving!');
+                return;
+            }
+
+            savedSlots.push({
+                id: Date.now(),
+                virtualPieces: JSON.parse(JSON.stringify(virtualCube.pieces)),
+                visualCubies: cubies.map(c => ({
+                    position: c.position.clone(),
+                    quaternion: c.quaternion.clone(),
+                })),
+            });
+            renderSlots();
+        });
+
+        function renderSlots() {
+            slotsContainer.innerHTML = '';
+
+            if (savedSlots.length > 0) {
+                const title = document.createElement('div');
+                title.className = 'slots-title';
+                title.innerText = 'Saved Slots';
+                slotsContainer.appendChild(title);
+            }
+
+            savedSlots.forEach((slot, index) => {
+                const badge = document.createElement('div');
+                badge.className = 'slot-badge';
+
+                const label = document.createElement('div');
+                label.className = 'slot-label';
+                label.innerHTML = `<i class="fa-solid fa-bookmark"></i> Slot ${index + 1}`;
+                label.title = `Load Slot ${index + 1}`;
+                label.onclick = () => loadSlot(slot.id);
+
+                const del = document.createElement('div');
+                del.className = 'delete-slot';
+                del.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+                del.title = 'Delete Slot';
+                del.onclick = (e) => {
+                    e.stopPropagation();
+                    savedSlots = savedSlots.filter(s => s.id !== slot.id);
+                    renderSlots();
+                };
+
+                badge.appendChild(label);
+                badge.appendChild(del);
+                slotsContainer.appendChild(badge);
+            });
+        }
+
+        function loadSlot(id) {
+            const slot = savedSlots.find(s => s.id === id);
+            if (!slot) return;
+
+            resetState();
+
+            // Re-parent cubies stuck on pivot mid-animation
+            cubies.forEach(c => {
+                if (c.parent !== rubikGroup) rubikGroup.attach(c);
+            });
+
+            // Remove leftover pivot objects
+            for (let i = rubikGroup.children.length - 1; i >= 0; i--) {
+                if (rubikGroup.children[i].type === 'Object3D') {
+                    rubikGroup.remove(rubikGroup.children[i]);
+                }
+            }
+
+            // Restore visual & virtual state
+            cubies.forEach((c, i) => {
+                c.position.copy(slot.visualCubies[i].position);
+                c.quaternion.copy(slot.visualCubies[i].quaternion);
+            });
+            virtualCube.pieces = JSON.parse(JSON.stringify(slot.virtualPieces));
+
+            renderer.render(scene, camera);
+            renderSlots();
+        }
+
+        // ==================== RESIZER & PANEL TOGGLE ====================
+        let isResizing = false;
+        let isPanelOpen = true;
+        let previousWidth = editorPanel.style.width || '33.3%';
+
+        // --- Mouse Events ---
+        resizerEl.addEventListener('mousedown', (e) => {
+            if (e.target.id === 'toggle-panel-btn') return;
+            isResizing = true;
+            resizerEl.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            // Hindari teks terseleksi saat kursor sedang menggeser resizer
+            document.body.style.userSelect = 'none'; 
+            editorPanel.style.transition = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = Math.max(0, Math.min(window.innerWidth - 200, window.innerWidth - e.clientX));
+            editorPanel.style.width = newWidth + 'px';
+            if (!isPanelOpen && newWidth > 150) {
+                isPanelOpen = true;
+                togglePanelBtn.innerHTML = '&gt;';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isResizing) return;
+            isResizing = false;
+            resizerEl.classList.remove('resizing');
+            document.body.style.cursor = 'default';
+            // Kembalikan seleksi teks seperti normal
+            document.body.style.userSelect = ''; 
+            editorPanel.style.transition = 'width 0.3s ease-in-out';
+            if (isPanelOpen) previousWidth = editorPanel.style.width;
+            
+            // Fix CodeMirror cutting off when resizing
+            setTimeout(() => cmInstance.refresh(), 350); 
+        });
+
+        // --- Touch Events (Mobile/Tablet) ---
+        resizerEl.addEventListener('touchstart', (e) => {
+            if (e.target.id === 'toggle-panel-btn') return;
+            isResizing = true;
+            resizerEl.classList.add('resizing');
+            // Hindari teks terseleksi saat layar disentuh untuk resize
+            document.body.style.userSelect = 'none'; 
+            editorPanel.style.transition = 'none';
+        }, { passive: true });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isResizing) return;
+            const touch = e.touches[0];
+            const newWidth = Math.max(0, Math.min(window.innerWidth - 200, window.innerWidth - touch.clientX));
+            editorPanel.style.width = newWidth + 'px';
+            if (!isPanelOpen && newWidth > 150) {
+                isPanelOpen = true;
+                togglePanelBtn.innerHTML = '&gt;';
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', () => {
+            if (!isResizing) return;
+            isResizing = false;
+            resizerEl.classList.remove('resizing');
+            // Kembalikan ke normal
+            document.body.style.userSelect = ''; 
+            editorPanel.style.transition = 'width 0.3s ease-in-out';
+            if (isPanelOpen) previousWidth = editorPanel.style.width;
+            
+            setTimeout(() => cmInstance.refresh(), 350);
+        });
+
+        togglePanelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isPanelOpen) {
+                previousWidth = editorPanel.style.width || getComputedStyle(editorPanel).width;
+                editorPanel.style.width = '0px';
+                togglePanelBtn.innerHTML = '&lt;';
+            } else {
+                editorPanel.style.width = previousWidth;
+                togglePanelBtn.innerHTML = '&gt;';
+            }
+            isPanelOpen = !isPanelOpen;
+            
+            setTimeout(() => cmInstance.refresh(), 350);
+        });
+
+        // ==================== CODE EDITOR RUNNER ====================
+        runBtn.addEventListener('click', () => {
+            if (isProcessingQueue) {
+                moveQueue.length = 0;
+                isShuffling = false;
+                runBtn.innerHTML = 'RUN <i class="fa-solid fa-play"></i>';
+                runBtn.style.backgroundColor = '';
+                return;
+            }
+
+            try {
+                // Now grabs code correctly from the new CodeMirror Editor instance
+                const code = cmInstance.getValue() +
+                    "\n\nif(typeof solve === 'function') { solve(virtualCube); }" +
+                    " else { throw new Error('Function solve(cube) not found!'); }";
+                new Function('virtualCube', code)(virtualCube);
+
+                if (moveQueue.length > 0) {
+                    runBtn.innerHTML = 'END <i class="fa-solid fa-pause"></i>';
+                    runBtn.style.backgroundColor = '#cc0000';
+                }
+            } catch (error) {
+                console.error('Solver Error:', error);
+                showMessage(error.message);
+            }
+        });
+
+        // ==================== RESPONSIVE RESIZE ====================
+        new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                if (width === 0 || height === 0) continue;
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(width, height);
+                renderer.render(scene, camera);
+            }
+        }).observe(canvasContainer);
+
+        // ==================== ANIMATION LOOP ====================
+        (function animate(time) {
+            requestAnimationFrame(animate);
+            TWEEN.update(time);
+            controls.update();
+            renderer.render(scene, camera);
+        })();
+    </script>
+</body>
+</html>
