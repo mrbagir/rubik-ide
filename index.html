@@ -683,8 +683,8 @@ function solve(cube) {
                             new THREE.MeshLambertMaterial({ color: x === -1 ? FACE_COLORS.L : 0x111111 }),
                             new THREE.MeshLambertMaterial({ color: y ===  1 ? FACE_COLORS.U : 0x111111 }),
                             new THREE.MeshLambertMaterial({ color: y === -1 ? FACE_COLORS.D : 0x111111 }),
-                            new THREE.MeshLambertMaterial({ color: z ===  1 ? FACE_COLORS.F : 0x111111 }),
-                            new THREE.MeshLambertMaterial({ color: z === -1 ? FACE_COLORS.B : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: z ===  1 ? FACE_COLORS.B : 0x111111 }),
+                            new THREE.MeshLambertMaterial({ color: z === -1 ? FACE_COLORS.F : 0x111111 }),
                         ];
 
                         const mesh = new THREE.Mesh(geo, mats);
